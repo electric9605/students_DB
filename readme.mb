@@ -1,0 +1,23 @@
+# setup_and_run.sh
+#!/bin/bash
+set -e
+
+# 1. Установка зависимостей
+pip install sqlalchemy alembic
+
+# 2. Инициализация Alembic
+alembic init alembic
+
+# 3. Копирование конфигов в структуру проекта
+# (Предполагается, что models.py и env.py уже находятся в корне)
+cp models.py alembic/
+mv alembic/env.py alembic/env.py.backup
+cp alembic/env.py alembic/
+
+# 4. Генерация миграции на основе моделей
+alembic revision --autogenerate -m "create students table"
+
+# 5. Применение миграции к БД
+alembic upgrade head
+
+echo "Миграция успешно применена. Файл БД: students.db"
