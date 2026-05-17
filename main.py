@@ -1,9 +1,11 @@
+from datetime import timedelta
 from typing import List
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
-
+from tasks import load_csv_task, delete_students_task
+from cache import cached_response, cache_delete
 from database import SessionLocal, engine, get_db
 from models import Base, Student, User
 from crud import StudentCRUD
@@ -11,6 +13,7 @@ from auth import get_current_user_by_id
 from schemas import UserRegister, UserLogin, AuthResponse
 import csv
 import io
+import asyncio
 
 #  таблицы при старте
 Base.metadata.create_all(bind=engine)
@@ -146,3 +149,47 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
     return AuthResponse(user_id=user.id, username=user.username)
 
 app.include_router(auth_router)
+
+@app.post("/admin/load-csv", status_code=202)
+def trigger_csv_load(csv_path: str, current_user: User = Depends(get_current_user_by_id)):
+    """Запускает фоновую загрузку CSV в БД"""
+    # Проверка: только админ может загружать данные
+    task = load_csv_task.delay(csv_path)
+    return {
+        "task_id": task.id,
+        "message": "Загрузка запущена в фоне",
+        "status_url": f"/admin/task/{task.id}"
+    }
+
+@app.post("/admin/delete-students", status_code=202)
+def trigger_delete_students(
+    student_ids: list[int],
+    current_user: User = Depends(get_current_user_by_id)
+):
+    """Запускает фоновое удаление студентов по списку ID"""
+    task = delete_students_task.delay(student_ids)
+    # Инвалидируем кэш списка студентов
+    cache_delete("students:*")
+    return {
+        "task_id": task.id,
+        "message": "Удаление запущено в фоне",
+        "status_url": f"/admin/task/{task.id}"
+    }
+
+@app.get("/students/")
+@cached_response("students", expire=timedelta(minutes=5))
+def get_students(
+    skip: int = 0, limit: int = 100,
+    crud: StudentCRUD = Depends(get_crud),
+    current_user: User = Depends(get_current_user_by_id)
+):
+    return crud.get_all()[skip:skip+limit]
+
+@app.get("/analytics/")
+@cached_response("analytics", expire=timedelta(minutes=5))
+def get_students(
+    skip: int = 0, limit: int = 100,
+    crud: StudentCRUD = Depends(get_crud),
+    current_user: User = Depends(get_current_user_by_id)
+):
+    return crud.get_all()[skip:skip+limit]
