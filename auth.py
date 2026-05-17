@@ -1,10 +1,18 @@
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Header
 from sqlalchemy.orm import Session
-from database import get_db  # ← Импортируем get_db отсюда
+from database import get_db
 from models import User
+from passlib.context import CryptContext
 
-# текущего пользователя по user_id из заголовка
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
 def get_current_user_by_id(
     user_id: int = Header(..., alias="X-User-ID"),
     db: Session = Depends(get_db)
@@ -16,12 +24,3 @@ def get_current_user_by_id(
             detail="Пользователь не найден или не активен",
         )
     return user
-
-# пользователь может быть анонимным
-def get_optional_user_by_id(
-    user_id: Optional[int] = Header(None, alias="X-User-ID"),
-    db: Session = Depends(lambda: None)
-) -> Optional[User]:
-    if not user_id:
-        return None
-    return db.query(User).filter(User.id == user_id, User.is_active == True).first()

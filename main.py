@@ -15,9 +15,6 @@ import csv
 import io
 import asyncio
 
-#  таблицы при старте
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(title="Student DB API", description="CRUD + аналитика по студентам")
 
 #  зависимости

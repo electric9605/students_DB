@@ -1,7 +1,7 @@
 from celery_app import celery_app
 from sqlalchemy.orm import Session
-from database import SessionLocal, engine
-from models import Base, Student, User
+from database import SessionLocal
+from models import Student, User
 from crud import StudentCRUD
 import csv
 import os
