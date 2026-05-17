@@ -4,12 +4,37 @@ from models import Student
 import csv
 import io
 from typing import List, Tuple, Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
+class UserRegister(BaseModel):
+    username: str = Field(..., min_length=3, max_length=50, pattern=r'^[a-zA-Z0-9_]+$')
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+
+    @field_validator('password')
+    @classmethod
+    def password_complexity(cls, v: str) -> str:
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну цифру')
+        if not any(c.isupper() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну заглавную букву')
+        if not any(c.islower() for c in v):
+            raise ValueError('Пароль должен содержать хотя бы одну строчную букву')
+        return v
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class AuthResponse(BaseModel):
+    user_id: int
+    username: str
+    message: str = "Успешная аутентификация"
 class StudentCRUD:
     def __init__(self, db: Session):
         self.db = db
 
-    # 🔹 INSERT
+    #  INSERT
     def create(self, data: dict) -> Student:
         new_student = Student(**data)
         self.db.add(new_student)
@@ -17,26 +42,26 @@ class StudentCRUD:
         self.db.refresh(new_student)  # Возвращаем объект с заполненным id
         return new_student
 
-    # 🔹 SELECT (по ID)
+    #  SELECT (по ID)
     def get_by_id(self, student_id: int) -> Optional[Student]:
         return self.db.query(Student).filter(Student.id == student_id).first()
 
-    #  SELECT (все записи)
+    #  SELECT (все)
     def get_all(self) -> List[Student]:
         return self.db.query(Student).all()
 
-    # 🔹 UPDATE
+    # UPDATE
     def update(self, student_id: int, update_data: dict) -> Optional[Student]:
         student = self.get_by_id(student_id)
         if not student:
             return None
         for key, value in update_data.items():
-            setattr(student, key, value)  # Безопасно обновляем только переданные поля
+            setattr(student, key, value)  
         self.db.commit()
         self.db.refresh(student)
         return student
 
-    # 🔹 DELETE
+    #  DELETE
     def delete(self, student_id: int) -> bool:
         student = self.get_by_id(student_id)
         if not student:
@@ -45,23 +70,23 @@ class StudentCRUD:
         self.db.commit()
         return True
 
-    # 📊 Запрос 1: Студенты по факультету
+    #  Запрос 1: Студенты по факультету
     def get_by_faculty(self, faculty: str) -> List[Student]:
         return self.db.query(Student).filter(Student.faculty == faculty).all()
 
-    # 📊 Запрос 2: Уникальные курсы (предметы)
+    #  Запрос 2: Уникальные курсы (предметы)
     def get_unique_courses(self) -> List[str]:
         # distinct() убирает дубли, возвращаем только названия
         return [row[0] for row in self.db.query(Student.subject).distinct().all()]
 
-    # 📊 Запрос 3: Студенты по курсу с оценкой < 30
+    #  Запрос 3: Студенты по курсу с оценкой < 30
     def get_low_grades(self, course: str, threshold: int = 30) -> List[Student]:
         return self.db.query(Student).filter(
             Student.subject == course,
             Student.grade < threshold
         ).all()
 
-    # 📊 Запрос 4: Средний балл по факультету
+    #  Запрос 4: Средний балл по факультету
     def get_avg_grade_by_faculty(self) -> List[Tuple[str, float]]:
         # group_by + func.avg = чистая SQL-агрегация
         return self.db.query(
@@ -69,7 +94,7 @@ class StudentCRUD:
             func.avg(Student.grade).label("avg_grade")
         ).group_by(Student.faculty).all()
 
-    # 🎁 Бонус: Экспорт в CSV (в памяти, без записи на диск)
+    # Экспорт в CSV
     def export_to_csv(self) -> str:
         students = self.get_all()
         output = io.StringIO()
